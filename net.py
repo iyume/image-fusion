@@ -4,7 +4,6 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 from torchvision.transforms import transforms
 
-from config import config
 from models.bisenet import BiSeNetV2
 
 bisenn = BiSeNetV2(19, aux_mode="pred")
@@ -64,7 +63,7 @@ class ConvBNReLU(nn.Module):
                 stride=stride,
                 padding=padding,
                 bias=False,
-                padding_mode="replicate",
+                padding_mode="reflect",
             )
         )
         self.bn = nn.BatchNorm2d(out_channels)
@@ -111,15 +110,31 @@ class ResBlock(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, stride: int = 1) -> None:
         super().__init__()
         self.conv = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, 3, stride=stride, padding=1),
+            nn.Conv2d(
+                in_channels,
+                out_channels,
+                3,
+                stride=stride,
+                padding=1,
+                padding_mode="reflect",
+            ),
             nn.BatchNorm2d(out_channels),
             nn.ReLU(True),
-            nn.Conv2d(out_channels, out_channels, 3, stride=stride, padding=1),
+            nn.Conv2d(
+                out_channels,
+                out_channels,
+                3,
+                stride=stride,
+                padding=1,
+                padding_mode="reflect",
+            ),
             nn.BatchNorm2d(out_channels),
         )
-        self.downsample = None
-        if in_channels != out_channels:
-            self.downsample = nn.Conv2d(in_channels, out_channels, 1, 1)
+        self.downsample = (
+            nn.Conv2d(in_channels, out_channels, 1)
+            if in_channels != out_channels
+            else None
+        )
 
     def forward(self, x: Tensor) -> Tensor:
         out = self.conv(x)
@@ -130,36 +145,45 @@ class ResBlock(nn.Module):
         return out
 
 
-class FeatureFusion(nn.Module):
+class FeatureExtractor(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.layer0 = nn.Sequential(
-            nn.Conv2d(1, 32, 7, stride=2, padding=3, bias=False),  # downscale
+        self.conv0 = nn.Sequential(
+            nn.Conv2d(
+                1, 32, 7, stride=2, padding=3, bias=False, padding_mode="reflect"
+            ),  # downscale
             nn.BatchNorm2d(32),
             nn.ReLU(True),
         )
-        self.layer1 = ResBlock(32, 32)
-        self.layer2 = ResBlock(32, 64)
-        self.layer3 = ResBlock(64, 64)
+        self.layer1 = nn.Sequential(ResBlock(32, 32), ResBlock(32, 32))
+        self.layer2 = nn.Sequential(ResBlock(32, 64), ResBlock(64, 64))
+        # self.layer3 = nn.Sequential(ResBlock(64, 128), ResBlock(128, 128))
 
-    def forward(self, vi: Tensor, ir: Tensor) -> Tensor:
+    def forward(self, x: Tensor) -> Tensor:
         # feat = torch.cat((vi, ir), dim=1)  # (N,4,H,W)
         # atten = torch.mean(feat, dim=(2, 3), keepdim=True)  # (N,4,1,1)
         # atten.sigmoid_()
         # feat_atten = feat * atten
-        x = self.layer0(ir)
+        x = self.conv0(x)
         x = self.layer1(x)
         x = self.layer2(x)
-        x = self.layer3(x)
+        # x = self.layer3(x)
         return x
 
 
 class Fusion(nn.Module):
     def __init__(self) -> None:
         super().__init__()
-        self.conv_vi = nn.Conv2d(3, 12, 3, stride=1, padding=1, bias=False)
-        self.conv_ir = nn.Conv2d(1, 12, 3, stride=1, padding=1, bias=False)
-        self.conv = nn.Conv2d(12, 1, 3, stride=1, padding=1, bias=False)
+        self.encode_vi = FeatureExtractor()
+        self.encode_ir = FeatureExtractor()
+        self.fuse = nn.Conv2d(128, 64, 1)
+        self.upsample = nn.Sequential(
+            nn.Conv2d(64, 32, 3, 1, 1),
+            nn.Conv2d(32, 16, 3, 1, 1),
+            nn.Conv2d(16, 4, 3, 1, 1),
+            nn.Conv2d(4, 1, 3, 1, 1),
+        )
+        self.upscale = nn.ConvTranspose2d(1, 1, 3, stride=2, padding=1)
 
     def forward(self, vi: Tensor, ir: Tensor) -> Tensor:
         """vi(N,3,H,W) ir(N,1,H,W)"""
@@ -175,4 +199,8 @@ class Fusion(nn.Module):
         # for i in range(semantic_ir.shape[0]):  # iter batch size
         #     mask = semantic_ir[i] == 11
         #     vi[i][:, mask] = fused_im[i][:, mask]
-        return self.conv_vi(vi)
+        encoded_vi = self.encode_vi(vi)
+        encoded_ir = self.encode_ir(ir)
+        fused = self.fuse(torch.cat((encoded_vi, encoded_ir), dim=1))
+        output = self.upscale(self.upsample(fused), vi.size())
+        return output

@@ -39,8 +39,8 @@ class MSRSset(BaseDataset):
         self.ir_train_path = self.root / "Infrared" / "train" / "MSRS"
         self.vi_test_path = self.root / "Visible" / "test" / "MSRS"
         self.ir_test_path = self.root / "Infrared" / "test" / "MSRS"
-        self.train_filenames = os.listdir(self.vi_train_path)
-        self.test_filenames = os.listdir(self.vi_test_path)
+        self.train_filenames = sorted(os.listdir(self.vi_train_path))
+        self.test_filenames = sorted(os.listdir(self.vi_test_path))
 
     def __getitem__(self, key: int) -> Tuple[Tensor, Tensor]:
         if self.train:

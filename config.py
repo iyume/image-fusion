@@ -3,6 +3,7 @@ class Config:
     MSRSdir = "./MSRS"
     visible_is_gray = True
     training = True
+    batch_size = 10
 
 
 # change it on argparse
