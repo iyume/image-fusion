@@ -1,48 +1,6 @@
-import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
-from torchvision.transforms import transforms
-
-from models.bisenet import BiSeNetV2
-
-bisenn = BiSeNetV2(19, aux_mode="pred")
-
-bisenn.load_state_dict(
-    torch.load("./models/model_final_v2_city.pth", map_location="cpu"), strict=False
-)
-bisenn.eval()
-bisenn.cpu()
-
-
-bisenn_norm = transforms.Normalize(
-    mean=(0.3257, 0.3690, 0.3223), std=(0.2112, 0.2148, 0.2115)
-)
-
-# color map respect to https://github.com/mcordts/cityscapesScripts/blob/master/cityscapesscripts/helpers/labels.py
-color_semantic = torch.tensor(
-    [
-        (128, 64, 128),  # 0: road
-        (244, 35, 232),  # 1: sidewalk
-        (70, 70, 70),  # 2: building
-        (102, 102, 156),  # 3: wall
-        (190, 153, 153),  # 4: fence
-        (153, 153, 153),  # 5: pole
-        (250, 170, 30),  # 6: traffic light
-        (220, 220, 0),  # 7: traffic sign
-        (107, 142, 35),  # 8: vegetation
-        (152, 251, 152),  # 9: terrain
-        (70, 130, 180),  # 10: sky
-        (220, 20, 60),  # 11: person
-        (255, 0, 0),  # 12: rider
-        (0, 0, 142),  # 13: car
-        (0, 0, 70),  # 14: truck
-        (0, 60, 100),  # 15: bus
-        (0, 80, 100),  # 16: train
-        (0, 0, 230),  # 17: motorcycle
-        (119, 11, 32),  # 18: bicycle
-    ]
-)
 
 
 class ConvBNReLU(nn.Module):
@@ -74,36 +32,6 @@ class ConvBNReLU(nn.Module):
         x = self.bn(x)  # accelerate conv weight training
         F.relu_(x)
         return x
-
-
-class Sobelxy(nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
-        kernel = torch.tensor([[1, 0, -1], [2, 0, -2], [1, 0, -1]], dtype=torch.float32)
-        self.convx = nn.Conv2d(1, 1, 3, stride=1, padding=1, bias=False)
-        self.convx.weight.data = kernel.unsqueeze(0).unsqueeze(0)
-        self.convy = nn.Conv2d(1, 1, 3, stride=1, padding=1, bias=False)
-        self.convy.weight.data = kernel.T.unsqueeze(0).unsqueeze(0)
-        self.requires_grad_(False)
-
-    def forward(self, x: Tensor) -> Tensor:
-        return self.convx(x) + self.convy(x)
-
-
-class Scharrxy(nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
-        kernel = torch.tensor(
-            [[3, 0, -3], [10, 0, -10], [3, 0, -3]], dtype=torch.float32
-        )
-        self.convx = nn.Conv2d(1, 1, 3, stride=1, padding=1, bias=False)
-        self.convx.weight.data = kernel.unsqueeze(0).unsqueeze(0)
-        self.convy = nn.Conv2d(1, 1, 3, stride=1, padding=1, bias=False)
-        self.convy.weight.data = kernel.T.unsqueeze(0).unsqueeze(0)
-        self.requires_grad_(False)
-
-    def forward(self, x: Tensor) -> Tensor:
-        return self.convx(x) + self.convy(x)
 
 
 class ResBlock(nn.Module):
@@ -187,20 +115,11 @@ class Fusion(nn.Module):
 
     def forward(self, vi: Tensor, ir: Tensor) -> Tensor:
         """vi(N,3,H,W) ir(N,1,H,W)"""
-        # vi = self.conv_vi(vi)
-        # ir = self.conv_ir(ir)
-        # save_tensor("conv_vi.png", vi)
-        # save_tensor("conv_ir.png", ir)
-        # # x = x.view(x.size(0), -1)  # flatten
-        # return self.conv(vi + ir)
-        # ir3c = torch.repeat_interleave(ir, 3, dim=1)
-        # semantic_ir: Tensor = bisenn(bisenn_norm(ir3c))  # (N,H,W) store labels
-        # fused_im = (vi + ScharrXY()(ir)) / 2
-        # for i in range(semantic_ir.shape[0]):  # iter batch size
-        #     mask = semantic_ir[i] == 11
-        #     vi[i][:, mask] = fused_im[i][:, mask]
         encoded_vi = self.encode_vi(vi)
         encoded_ir = self.encode_ir(ir)
         fused = self.fuse(torch.cat((encoded_vi, encoded_ir), dim=1))
         output = self.upscale(self.upsample(fused), vi.size())
         return output
+
+    def __call__(self, *args, **kwargs) -> Tensor:
+        return super().__call__(*args, **kwargs)

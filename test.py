@@ -1,24 +1,51 @@
+from functools import partial
+from pathlib import Path
+from typing import OrderedDict, Union
+
 import cv2
 import torch
-from PIL import Image
 from torch.utils.data import DataLoader
-from torchvision.transforms import ToTensor
+from torchvision import transforms
 
 from config import config
 from net import Fusion
-from util import MSRSset, imsave_tensor
+from util import MSRSset
 
 testset = MSRSset(config.MSRSdir, train=False)
 
-test_loader = DataLoader(testset, batch_size=5)
+test_loader = DataLoader(testset)
 
-first_batch_vi, first_batch_ir = next(iter(test_loader))
 
-net = Fusion()
-net.load_state_dict(torch.load("ckpt/model_final.pth"))
-net.eval()
+eval_transform = transforms.Compose(
+    [transforms.ToTensor(), partial(torch.unsqueeze, dim=0)]
+)
 
-output = net(first_batch_vi, first_batch_ir)
 
-for i, im in enumerate(output):
-    imsave_tensor(f"fusion_trained{i}.png", im)
+def test() -> None:
+    """Test model accurate from test dataset."""
+
+
+def eval(model: OrderedDict, output_dir: Union[Path, str]) -> None:
+    """Evaluate images."""
+    net = Fusion()
+    net.load_state_dict(model)
+    net.eval()
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    vi_filename = "test_img/vi{:01d}.png"
+    ir_filename = "test_img/ir{:01d}.png"
+    # if names like 'ir01.png', replace 01d with 02d
+    for i in range(10):
+        vi = cv2.imread(vi_filename.format(i + 1), cv2.IMREAD_GRAYSCALE)
+        ir = cv2.imread(ir_filename.format(i + 1), cv2.IMREAD_GRAYSCALE)
+        vi = eval_transform(vi)
+        ir = eval_transform(ir)
+        fused = net(vi, ir)
+        cv2.imwrite(
+            str(output_dir / f"fusion{i+1}.png"),
+            fused.detach().squeeze().numpy() * 255,
+        )
+
+
+if __name__ == "__main__":
+    eval(torch.load("./ckpt/iter_53_of_109.pth"), "result")
