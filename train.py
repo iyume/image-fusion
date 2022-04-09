@@ -15,12 +15,15 @@ train_loader = DataLoader(trainset, batch_size=config.batch_size)
 
 def train(ckpt_path: str = "ckpt") -> None:
     net = Fusion()
+    net.to(config.device)
     optimizer = torch.optim.Adam(net.parameters())
     l1loss = torch.nn.L1Loss()
     for i, batch in enumerate(train_loader):
         vi, ir = batch
+        vi = vi.to(device=config.device)
+        ir = ir.to(device=config.device)
         label = create_label(vi, ir)
-        optimizer.zero_grad(set_to_none=True)
+        optimizer.zero_grad()  # higher torch give set_to_none
         logger.info(f"# starting {i + 1}/{len(train_loader)}")
         fused_im = net(vi, ir)
         loss = l1loss(label, fused_im)

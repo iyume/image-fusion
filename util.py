@@ -23,7 +23,7 @@ bisenn.load_state_dict(
     torch.load("./models/model_final_v2_city.pth", map_location="cpu"), strict=False
 )
 bisenn.eval()
-bisenn.cpu()
+bisenn.to(config.device)
 
 bisenn_norm = transforms.Normalize(
     mean=(0.3257, 0.3690, 0.3223), std=(0.2112, 0.2148, 0.2115)
@@ -77,7 +77,7 @@ def get_semantic_color_map(x: Tensor) -> Tensor:
     if len(x.shape) == 3:
         x = x.unsqueeze(0)
     if x.shape[1] == 1:
-        x = torch.repeat_interleave(x, 3, dim=1)
+        x = torch.repeat_interleave(x, 3, dim=1)  # requires torch 1.1.0+
     index_map = bisenn(bisenn_norm(x))
     semantic_map = color_semantic[index_map]
     return semantic_map
@@ -89,12 +89,13 @@ def create_label(vi: Tensor, ir: Tensor) -> Tensor:
         vi: shape (N,C,H,W), C=1
         ir: shape (N,C,H,W), C=1
     """
+    ir3c = torch.cat((ir, ir, ir), dim=1)
     semantic_map = bisenn(
-        bisenn_norm(torch.repeat_interleave(ir, 3, dim=1))
+        torch.cat(tuple(bisenn_norm(x).unsqueeze(0) for x in ir3c), dim=0)
     )  # (N,H,W) store labels
     label = vi.clone()
     for i in range(semantic_map.shape[0]):  # iter batch size
-        mask = torch.logical_or(semantic_map[i] == 11, semantic_map[i] == 13)
+        mask = (semantic_map[i] == 11) + (semantic_map[i] == 13)
         label[i][:, mask] = ir[i][:, mask]
     return label
 
