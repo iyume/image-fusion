@@ -36,10 +36,8 @@ def eval(model: OrderedDict, output_dir: Union[Path, str]) -> None:
     ir_filename = "test_img/ir{:01d}.png"
     # if names like 'ir01.png', replace 01d with 02d
     for i in range(10):
-        vi = cv2.imread(vi_filename.format(i + 1), cv2.IMREAD_GRAYSCALE)
-        ir = cv2.imread(ir_filename.format(i + 1), cv2.IMREAD_GRAYSCALE)
-        vi = eval_transform(vi)
-        ir = eval_transform(ir)
+        vi = eval_transform(cv2.imread(vi_filename.format(i + 1), cv2.IMREAD_GRAYSCALE))
+        ir = eval_transform(cv2.imread(ir_filename.format(i + 1), cv2.IMREAD_GRAYSCALE))
         fused = net(vi, ir)
         cv2.imwrite(
             str(output_dir / f"fusion{i+1}.png"),
@@ -48,4 +46,11 @@ def eval(model: OrderedDict, output_dir: Union[Path, str]) -> None:
 
 
 if __name__ == "__main__":
-    eval(torch.load("./ckpt/iter_53_of_109.pth"), "result")
+    # eval(torch.load("./ckpt/iter_53_of_109.pth"), "result")
+    from torchvision.models.segmentation import deeplabv3_resnet50
+
+    vi = eval_transform(cv2.imread("test_img/vi1.png"))
+    net = deeplabv3_resnet50(pretrained_backbone=False)
+    net.eval()
+    output = net(vi)
+    ...
