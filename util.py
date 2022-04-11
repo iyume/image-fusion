@@ -4,8 +4,8 @@ from pathlib import Path
 from typing import Tuple
 
 import cv2
+import numpy as np
 import torch
-from PIL import Image
 from torch import Tensor, nn
 from torch.utils.data import Dataset as BaseDataset
 from torchvision import transforms
@@ -14,7 +14,14 @@ from torchvision.transforms import ToTensor
 from config import config
 from models.bisenet import BiSeNetV2
 
-logging.basicConfig(level=config.log_level, format="%(message)s")
+logging.basicConfig(
+    level=(
+        config.log_level
+        if isinstance(config.log_level, int)
+        else config.log_level.upper()
+    ),
+    format="%(message)s",
+)
 logger = logging.getLogger()
 
 
@@ -25,8 +32,8 @@ bisenn.load_state_dict(
 bisenn.eval()
 bisenn.to(config.device)
 
-bisenn_norm = transforms.Normalize(
-    mean=(0.3257, 0.3690, 0.3223), std=(0.2112, 0.2148, 0.2115)
+bisenn_norm = transforms.Compose(
+    [transforms.Normalize(mean=(0.3257, 0.3690, 0.3223), std=(0.2112, 0.2148, 0.2115))]
 )
 
 # color map respect to https://github.com/mcordts/cityscapesScripts/blob/master/cityscapesscripts/helpers/labels.py
@@ -103,6 +110,7 @@ def create_label(vi: Tensor, ir: Tensor) -> Tensor:
 class MSRSset(BaseDataset):
     def __init__(self, root: str, train: bool = True) -> None:
         """Initial MSRS dataset."""
+        self.name = "MSRS"
         self.root = Path(root)
         self.train = train
         self.vi_train_path = self.root / "Visible" / "train" / "MSRS"
@@ -119,14 +127,14 @@ class MSRSset(BaseDataset):
         else:
             vi_file = self.vi_test_path / self.test_filenames[key]
             ir_file = self.ir_test_path / self.test_filenames[key]
-        imvi = Image.open(vi_file)
-        imir = Image.open(ir_file).convert("L")
+        imvi = cv2.imread(str(vi_file))
+        imir = cv2.imread(str(ir_file), cv2.IMREAD_GRAYSCALE)
         if config.visible_is_gray:
-            imvi = imvi.convert("L")
+            imvi = cv2.cvtColor(imvi, cv2.COLOR_BGR2GRAY)
         return self.transform(imvi), self.transform(imir)
 
     @staticmethod
-    def transform(img: Image.Image) -> Tensor:
+    def transform(img: np.ndarray) -> Tensor:
         return ToTensor()(img)
 
     def __len__(self) -> int:

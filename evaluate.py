@@ -1,25 +1,17 @@
 from collections import OrderedDict
-from functools import partial
 from pathlib import Path
 from time import time
 from typing import Union
 
 import cv2
 import torch
-from torch.utils.data import DataLoader
 from torchvision import transforms
 
 from config import config
 from net import Fusion
-from util import MSRSset
-
-testset = MSRSset(config.MSRSdir, train=False)
-
-test_loader = DataLoader(testset)
-
 
 eval_transform = transforms.Compose(
-    [transforms.ToTensor(), partial(torch.unsqueeze, dim=0)]
+    [transforms.ToTensor(), lambda x: torch.unsqueeze(x, dim=0)]
 )
 
 
@@ -47,7 +39,7 @@ def evaluate(state_dict: OrderedDict, output_dir: Union[Path, str]) -> None:
             ir = ir.to(config.device)
             fused = net(vi, ir)
             etime = time()
-            print(f"test {i}: {etime-stime:.4f}")
+            print(f"test {i+1:02d}: {etime-stime:.4f}")
             cv2.imwrite(
                 str(output_dir / f"fusion{i+1}.png"),
                 fused.cpu().detach().squeeze().numpy() * 255,
@@ -55,4 +47,6 @@ def evaluate(state_dict: OrderedDict, output_dir: Union[Path, str]) -> None:
 
 
 if __name__ == "__main__":
-    evaluate(torch.load("./ckpt/iter_53_of_109.pth"), "result")
+    evaluate(
+        torch.load("./ckpt/model_MSRS_epo0.pth", map_location=config.device), "result"
+    )

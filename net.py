@@ -1,5 +1,3 @@
-from typing import Tuple
-
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
@@ -51,28 +49,6 @@ class ResBlock(nn.Module):
         return out
 
 
-# class FeatureExtractor(nn.Module):
-#     def __init__(self) -> None:
-#         super().__init__()
-#         self.conv0 = nn.Sequential(
-#             nn.Conv2d(1, 16, 3, padding=1, bias=False, padding_mode="reflect"),
-#             nn.BatchNorm2d(16),
-#             nn.ReLU(True),
-#         )
-#         self.layer1 = ResBlock(16, 16)
-#         self.layer2 = ResBlock(16, 32, dilation=2)
-
-#     def forward(self, x: Tensor) -> Tuple[Tensor, Tensor]:
-#         # feat = torch.cat((vi, ir), dim=1)  # (N,4,H,W)
-#         # atten = torch.mean(feat, dim=(2, 3), keepdim=True)  # (N,4,1,1)
-#         # atten.sigmoid_()
-#         # feat_atten = feat * atten
-#         x = self.conv0(x)
-#         x1 = self.layer1(x)
-#         x2 = self.layer2(x1)
-#         return x1, x2
-
-
 class Fusion(nn.Module):
     def __init__(self) -> None:
         super().__init__()
@@ -88,11 +64,8 @@ class Fusion(nn.Module):
         )
         self.layer1vi = ResBlock(16, 32, dilation=2)
         self.layer1ir = ResBlock(16, 32, dilation=2)
-        self.layer2vi = ResBlock(32, 64, dilation=2)
-        self.layer2ir = ResBlock(32, 64, dilation=2)
         self.fuse0 = nn.Conv2d(32, 16, 1)
         self.fuse1 = nn.Conv2d(64, 32, 1)
-        self.fuse2 = nn.Conv2d(128, 64, 1)
         self.rec = nn.Sequential(
             nn.Conv2d(32 + 16, 32, 1), nn.Conv2d(32, 16, 1), nn.Conv2d(16, 1, 1)
         )
@@ -103,8 +76,6 @@ class Fusion(nn.Module):
         fuse0 = self.fuse0(torch.cat((vi, ir), dim=1))
         vi, ir = self.layer1vi(vi), self.layer1ir(ir)
         fuse1 = self.fuse1(torch.cat((vi, ir), dim=1))
-        # vi, ir = self.layer2vi(vi), self.layer2ir(ir)
-        # fuse2 = self.fuse2(torch.cat((vi, ir), dim=1))
         return self.rec(torch.cat((fuse0, fuse1), dim=1))
 
     def __call__(self, *args, **kwargs) -> Tensor:

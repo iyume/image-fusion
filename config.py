@@ -2,12 +2,15 @@ import torch
 
 
 class Config:
-    log_level = 20
+    """Training config."""
+
+    log_level = "DEBUG"  # only INFO and DEBUG level support
     MSRSdir = "./MSRS"
     visible_is_gray = True
-    training = True
-    batch_size = 10
-    device = torch.device("cuda:0")
+    epoch = 3
+    learning_rate = 1e-3
+    batch_size = 6
+    device = torch.device("cpu")
 
 
 # change it on argparse
