@@ -18,7 +18,7 @@ eval_transform = transforms.Compose(
 def evaluate(state_dict: OrderedDict, output_dir: Union[Path, str]) -> None:
     """Evaluate images."""
     net = Fusion()
-    net.load_state_dict(state_dict)
+    net.load_state_dict(state_dict, strict=False)
     net.eval()
     net.to(config.device)
     output_dir = Path(output_dir)
@@ -27,7 +27,7 @@ def evaluate(state_dict: OrderedDict, output_dir: Union[Path, str]) -> None:
     ir_filename = "test_img/ir{:01d}.png"
     # if names like 'ir01.png', replace 01d with 02d
     with torch.no_grad():
-        for i in range(10):
+        for i in range(20):
             stime = time()
             vi = eval_transform(
                 cv2.imread(vi_filename.format(i + 1), cv2.IMREAD_GRAYSCALE)
@@ -48,5 +48,6 @@ def evaluate(state_dict: OrderedDict, output_dir: Union[Path, str]) -> None:
 
 if __name__ == "__main__":
     evaluate(
-        torch.load("./ckpt/model_MSRS_epo0.pth", map_location=config.device), "result"
+        torch.load("./ckpt/model_MSRS_epo1.pth", map_location=config.device),
+        "result",
     )

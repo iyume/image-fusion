@@ -115,23 +115,36 @@ class MSRSset(BaseDataset):
         self.train = train
         self.vi_train_path = self.root / "Visible" / "train" / "MSRS"
         self.ir_train_path = self.root / "Infrared" / "train" / "MSRS"
+        self.label_train_path = self.root / "Label" / "train" / "MSRS"
         self.vi_test_path = self.root / "Visible" / "test" / "MSRS"
         self.ir_test_path = self.root / "Infrared" / "test" / "MSRS"
+        self.label_test_path = self.root / "Label" / "test" / "MSRS"
         self.train_filenames = sorted(os.listdir(self.vi_train_path))
         self.test_filenames = sorted(os.listdir(self.vi_test_path))
 
-    def __getitem__(self, key: int) -> Tuple[Tensor, Tensor]:
+    def __getitem__(self, key: int) -> Tuple[Tensor, Tensor, Tensor, bool]:
         if self.train:
-            vi_file = self.vi_train_path / self.train_filenames[key]
-            ir_file = self.ir_train_path / self.train_filenames[key]
+            filename = self.train_filenames[key]
+            vi_file = self.vi_train_path / filename
+            ir_file = self.ir_train_path / filename
+            label_file = self.label_train_path / filename
         else:
-            vi_file = self.vi_test_path / self.test_filenames[key]
-            ir_file = self.ir_test_path / self.test_filenames[key]
+            filename = self.test_filenames[key]
+            vi_file = self.vi_test_path / filename
+            ir_file = self.ir_test_path / filename
+            label_file = self.label_test_path / filename
         imvi = cv2.imread(str(vi_file))
         imir = cv2.imread(str(ir_file), cv2.IMREAD_GRAYSCALE)
+        imlabel = cv2.imread(str(label_file), cv2.IMREAD_GRAYSCALE)
+        is_night = filename.endswith("N.png")
         if config.visible_is_gray:
             imvi = cv2.cvtColor(imvi, cv2.COLOR_BGR2GRAY)
-        return self.transform(imvi), self.transform(imir)
+        return (
+            self.transform(imvi),
+            self.transform(imir),
+            torch.from_numpy(imlabel).unsqueeze(0),
+            is_night,
+        )
 
     @staticmethod
     def transform(img: np.ndarray) -> Tensor:

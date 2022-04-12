@@ -53,12 +53,12 @@ class Fusion(nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self.conv0vi = nn.Sequential(
-            nn.Conv2d(1, 16, 3, padding=1, bias=False, padding_mode="reflect"),
+            nn.Conv2d(1, 16, 3, padding=1, padding_mode="reflect"),
             nn.BatchNorm2d(16),
             nn.ReLU(True),
         )
         self.conv0ir = nn.Sequential(
-            nn.Conv2d(1, 16, 3, padding=1, bias=False, padding_mode="reflect"),
+            nn.Conv2d(1, 16, 3, padding=1, padding_mode="reflect"),
             nn.BatchNorm2d(16),
             nn.ReLU(True),
         )
@@ -67,16 +67,21 @@ class Fusion(nn.Module):
         self.fuse0 = nn.Conv2d(32, 16, 1)
         self.fuse1 = nn.Conv2d(64, 32, 1)
         self.rec = nn.Sequential(
-            nn.Conv2d(32 + 16, 32, 1), nn.Conv2d(32, 16, 1), nn.Conv2d(16, 1, 1)
+            nn.Conv2d(32 + 16, 32, 3, padding=1),
+            nn.ReLU(True),
+            nn.Conv2d(32, 16, 3, padding=1),
+            nn.ReLU(True),
+            nn.Conv2d(16, 1, 3, padding=1),
         )
 
     def forward(self, vi: Tensor, ir: Tensor) -> Tensor:
         """vi(N,1,H,W) ir(N,1,H,W)"""
-        vi, ir = self.conv0vi(vi), self.conv0ir(ir)
-        fuse0 = self.fuse0(torch.cat((vi, ir), dim=1))
-        vi, ir = self.layer1vi(vi), self.layer1ir(ir)
-        fuse1 = self.fuse1(torch.cat((vi, ir), dim=1))
-        return self.rec(torch.cat((fuse0, fuse1), dim=1))
+        vien, iren = self.conv0vi(vi), self.conv0ir(ir)
+        fuse0 = self.fuse0(torch.cat((vien, iren), dim=1))
+        vien, iren = self.layer1vi(vien), self.layer1ir(iren)
+        fuse1 = self.fuse1(torch.cat((vien, iren), dim=1))
+        fused = self.rec(torch.cat((fuse0, fuse1), dim=1))
+        return fused * 2
 
     def __call__(self, *args, **kwargs) -> Tensor:
         return super().__call__(*args, **kwargs)

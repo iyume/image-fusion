@@ -5,6 +5,7 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from config import config
+from util import imsave_tensor
 
 
 def sobelxy(im: Tensor) -> Tensor:
@@ -16,11 +17,17 @@ def sobelxy(im: Tensor) -> Tensor:
     return F.conv2d(im, wx, padding=1) + F.conv2d(im, wy, padding=1)
 
 
-def l1_loss(vi: Tensor, ir: Tensor, fused: Tensor) -> Tuple[Tensor, Tensor, Tensor]:
-    loss_in = F.l1_loss(torch.max(vi, ir), fused)
+def l1_loss(
+    vi: Tensor, ir: Tensor, label: Tensor, fused: Tensor
+) -> Tuple[Tensor, Tensor, Tensor]:
+    label[:, 0, 0, 0] = 2  # avoid nan
+    mask = label == 2
+    maxlabel = vi.clone()
+    maxlabel[mask] = torch.max(vi, ir)[mask]
+    loss_max = F.mse_loss(fused, maxlabel)
     vi_grad = sobelxy(vi)
     ir_grad = sobelxy(ir)
     fused_grad = sobelxy(fused)
-    loss_grad = F.l1_loss(torch.max(vi_grad, ir_grad), fused_grad)
-    loss_total = loss_in + 10 * loss_grad
-    return loss_total, loss_in, loss_grad
+    loss_grad = F.mse_loss(fused_grad, torch.max(vi_grad, ir_grad))
+    loss_total = loss_max + 10 * loss_grad
+    return loss_total, loss_max, loss_grad
