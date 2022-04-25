@@ -8,24 +8,27 @@ import torch
 from torchvision import transforms
 
 from config import config
-from net import Fusion
+from net import AutoEncoder
+from util import logger
 
 eval_transform = transforms.Compose(
     [transforms.ToTensor(), lambda x: torch.unsqueeze(x, dim=0)]
 )
 
+net = AutoEncoder()
+
 
 def evaluate(state_dict: OrderedDict, output_dir: Union[Path, str]) -> None:
     """Evaluate images."""
-    net = Fusion()
+    logger.debug(repr(state_dict.keys()))
     net.load_state_dict(state_dict, strict=False)
     net.eval()
     net.to(config.device)
-    output_dir = Path(output_dir)
+    if not isinstance(output_dir, Path):
+        output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     vi_filename = "test_img/vi{:01d}.png"
     ir_filename = "test_img/ir{:01d}.png"
-    # if names like 'ir01.png', replace 01d with 02d
     with torch.no_grad():
         for i in range(20):
             stime = time()
@@ -37,17 +40,19 @@ def evaluate(state_dict: OrderedDict, output_dir: Union[Path, str]) -> None:
             )
             vi = vi.to(config.device)
             ir = ir.to(config.device)
-            fused = net(vi, ir)
+            vi_features = net.encode(vi)
+            ir_features = net.encode(ir)
+            out = net.decode(torch.max(vi_features, ir_features))
             etime = time()
-            print(f"test {i+1:02d}: {etime-stime:.4f}")
+            logger.info(f"test {i+1:02d}: {etime-stime:.4f}")
             cv2.imwrite(
-                str(output_dir / f"fusion{i+1}.png"),
-                fused.cpu().detach().squeeze().numpy() * 255,
+                str(output_dir / f"fusion{i+1:02d}.png"),
+                out.detach().cpu().squeeze().numpy() * 255,
             )
 
 
 if __name__ == "__main__":
     evaluate(
-        torch.load("./ckpt/model_MSRS_epo1.pth", map_location=config.device),
+        torch.load("./ckpt/model_MSRS_encoder_final.pth", map_location=config.device),
         "result",
     )

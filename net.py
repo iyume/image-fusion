@@ -1,87 +1,77 @@
-import torch
+from typing import Callable, Optional
+
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+Conv_T = Callable[[Tensor], Tensor]
 
-class ResBlock(nn.Module):
-    def __init__(self, in_channels: int, out_channels: int, dilation: int = 1) -> None:
+
+def conv3x3(in_channels: int, out_channels: int, groups: int = 1) -> nn.Module:
+    return nn.Conv2d(
+        in_channels, out_channels, 3, padding=1, padding_mode="reflect", groups=groups
+    )
+
+
+class Bottleneck(nn.Module):
+    """Grouped downsample Bottleneck implement."""
+
+    def __init__(self, in_channels: int, out_channels: int, mid_channels: int) -> None:
         super().__init__()
-        stride = 1 if in_channels == out_channels or dilation > 1 else 2
         self.conv = nn.Sequential(
-            nn.Conv2d(
-                in_channels,
-                out_channels,
-                3,
-                stride=stride,
-                padding=dilation,
-                padding_mode="reflect",
-                dilation=dilation,
-            ),
-            nn.BatchNorm2d(out_channels),
+            nn.Conv2d(in_channels, mid_channels, 1),
+            # nn.BatchNorm2d(mid_channels),  # must remove
             nn.ReLU(True),
-            nn.Conv2d(
-                out_channels,
-                out_channels,
-                3,
-                stride=1,
-                padding=1,
-                padding_mode="reflect",
-            ),
-            nn.BatchNorm2d(out_channels),
+            conv3x3(mid_channels, mid_channels),
+            # nn.BatchNorm2d(mid_channels),
+            nn.ReLU(True),
+            nn.Conv2d(mid_channels, out_channels, 1),
+            # nn.BatchNorm2d(out_channels),
         )
         self.downsample = (
-            nn.Sequential(
-                nn.Conv2d(
-                    in_channels, out_channels, 1, stride=stride, dilation=dilation
-                ),
-                nn.BatchNorm2d(out_channels),
-            )
+            nn.Conv2d(in_channels, out_channels, 1)
             if in_channels != out_channels
             else None
         )
 
     def forward(self, x: Tensor) -> Tensor:
-        out = self.conv(x)
-        if self.downsample:
-            x = self.downsample(x)
-        out += x
-        F.relu_(out)
-        return out
+        identity = x
+        if self.downsample is not None:
+            identity = self.downsample(identity)
+        residual = self.conv(x)
+        identity += residual
+        identity = F.relu_(identity)
+        return identity
 
 
-class Fusion(nn.Module):
+class AutoEncoder(nn.Module):
+    """Implement Bottleneck encoder with groups decoder."""
+
     def __init__(self) -> None:
         super().__init__()
-        self.conv0vi = nn.Sequential(
-            nn.Conv2d(1, 16, 3, padding=1, padding_mode="reflect"),
-            nn.BatchNorm2d(16),
-            nn.ReLU(True),
+        self._middle_layer_hook: Optional[Conv_T] = None
+        groups = 16
+        cgrow = (groups, groups * 2, groups * 3)
+        cmid = (8, 12)
+        self.encode = nn.Sequential(
+            conv3x3(1, cgrow[0]),
+            Bottleneck(cgrow[0], cgrow[1], cmid[0]),
+            Bottleneck(cgrow[1], cgrow[2], cmid[1]),
         )
-        self.conv0ir = nn.Sequential(
-            nn.Conv2d(1, 16, 3, padding=1, padding_mode="reflect"),
-            nn.BatchNorm2d(16),
+        self.decode = nn.Sequential(
+            conv3x3(cgrow[2], cgrow[1], groups=groups),
             nn.ReLU(True),
-        )
-        self.layer1vi = ResBlock(16, 32, dilation=2)
-        self.layer1ir = ResBlock(16, 32, dilation=2)
-        self.fuse0 = nn.Conv2d(32, 16, 1)
-        self.fuse1 = nn.Conv2d(64, 32, 1)
-        self.rec = nn.Sequential(
-            nn.Conv2d(32 + 16, 32, 3, padding=1),
+            conv3x3(cgrow[1], cgrow[0], groups=groups),
             nn.ReLU(True),
-            nn.Conv2d(32, 16, 3, padding=1),
-            nn.ReLU(True),
-            nn.Conv2d(16, 1, 3, padding=1),
+            conv3x3(cgrow[0], 1),
         )
 
-    def forward(self, vi: Tensor, ir: Tensor) -> Tensor:
-        """vi(N,1,H,W) ir(N,1,H,W)"""
-        vien, iren = self.conv0vi(vi), self.conv0ir(ir)
-        fuse0 = self.fuse0(torch.cat((vien, iren), dim=1))
-        vien, iren = self.layer1vi(vien), self.layer1ir(iren)
-        fuse1 = self.fuse1(torch.cat((vien, iren), dim=1))
-        fused = self.rec(torch.cat((fuse0, fuse1), dim=1))
-        return fused * 2
+    def forward(self, x: Tensor) -> Tensor:
+        en = self.encode(x)
+        if self._middle_layer_hook is not None:
+            en = self._middle_layer_hook(en)
+        de = self.decode(en)
+        return de
 
-    def __call__(self, *args, **kwargs) -> Tensor:
-        return super().__call__(*args, **kwargs)
+    def on_middle_layer(self, func: Conv_T) -> None:
+        """Register hook before decoding."""
+        self._middle_layer_hook = func

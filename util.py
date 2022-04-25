@@ -6,6 +6,7 @@ from typing import Tuple
 import cv2
 import numpy as np
 import torch
+import torch.nn.functional as F
 from torch import Tensor, nn
 from torch.utils.data import Dataset as BaseDataset
 from torchvision.transforms import ToTensor
@@ -18,19 +19,18 @@ logging.basicConfig(
         if isinstance(config.log_level, int)
         else config.log_level.upper()
     ),
-    format="%(message)s",
+    format="%(levelname)s | %(message)s",
 )
 logger = logging.getLogger()
 
 
 def imsave_tensor(filename: str, x: Tensor) -> None:
     """Save (C,H,W) tensor."""
-    im = x.squeeze().detach().numpy() * 255
+    im = x.squeeze().detach().cpu().numpy() * 255
     if len(im.shape) == 3:
         im = im.transpose(1, 2, 0)
     elif len(im.shape) != 2:
         raise ValueError
-    im = cv2.cvtColor(im, cv2.COLOR_RGB2BGR)
     cv2.imwrite(str(Path("output") / filename), im)
 
 
@@ -82,6 +82,13 @@ class MSRSset(BaseDataset):
             return len(self.train_filenames)
         else:
             return len(self.test_filenames)
+
+
+def sobelxy(im: Tensor) -> Tensor:
+    kernel = im.new_tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]])
+    wx = kernel.unsqueeze(0).unsqueeze(0)
+    wy = kernel.transpose(1, 0).unsqueeze(0).unsqueeze(0)
+    return F.conv2d(im, wx, padding=1) + F.conv2d(im, wy, padding=1)
 
 
 class Sobelxy(nn.Module):
