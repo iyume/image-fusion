@@ -85,12 +85,15 @@ class MSRSset(BaseDataset):
 
 
 def sobelxy(im: Tensor) -> Tensor:
+    """Gradient implement. addWeighted 0.5 and batch suit."""
     kernel = im.new_tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]])
     wx = kernel.unsqueeze(0).unsqueeze(0)
     wy = kernel.transpose(1, 0).unsqueeze(0).unsqueeze(0)
+    wx = wx.repeat(im.shape[1], 1, 1, 1)
+    wy = wy.repeat(im.shape[1], 1, 1, 1)
     im = F.pad(im, (1, 1, 1, 1), mode="reflect")
-    gx = F.conv2d(im, wx)
-    gy = F.conv2d(im, wy)
+    gx = F.conv2d(im, wx, groups=im.shape[1])
+    gy = F.conv2d(im, wy, groups=im.shape[1])
     return gx * 0.5 + gy * 0.5  # like addWeighted
 
 

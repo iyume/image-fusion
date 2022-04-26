@@ -9,7 +9,7 @@ from torchvision import transforms
 
 from config import config
 from net import AutoEncoder
-from util import logger
+from util import logger, sobelxy
 
 eval_transform = transforms.Compose(
     [transforms.ToTensor(), lambda x: torch.unsqueeze(x, dim=0)]
@@ -42,7 +42,15 @@ def evaluate(state_dict: OrderedDict, output_dir: Union[Path, str]) -> None:
             ir = ir.to(config.device)
             vi_features = net.encode(vi)
             ir_features = net.encode(ir)
-            out = net.decode(torch.max(vi_features, ir_features))
+            out = net.decode(
+                torch.cat(
+                    (
+                        torch.max(vi_features, ir_features),
+                        torch.max(sobelxy(vi_features), sobelxy(ir_features)),
+                    ),
+                    1,
+                )
+            )
             etime = time()
             logger.info(f"test {i+1:02d}: {etime-stime:.4f}")
             cv2.imwrite(

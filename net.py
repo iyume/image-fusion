@@ -53,7 +53,7 @@ class AutoEncoder(nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self._middle_layer_hook: Optional[Conv_T] = None
-        groups = 12
+        groups = 12  # multiple of 4
         cgrow = (groups, groups * 2, groups * 3)
         cmid = (8, 12)
         self.layer = nn.Sequential(
@@ -62,11 +62,14 @@ class AutoEncoder(nn.Module):
             Bottleneck(cgrow[1], cgrow[2], cmid[1]),
         )
         self.rlayer = nn.Sequential(
+            nn.Conv2d(cgrow[2] * 2, cgrow[2], 1),
             conv3x3(cgrow[2], cgrow[1], groups=groups),
             nn.ReLU(True),
-            conv3x3(cgrow[1], cgrow[0], groups=groups),
+            conv3x3(cgrow[1], cgrow[0], groups=groups // 4),
             nn.ReLU(True),
-            conv3x3(cgrow[0], 1),
+            conv3x3(cgrow[0], 6),
+            nn.ReLU(True),
+            conv3x3(6, 1),
         )
 
     def forward(self, x: Tensor) -> Tensor:
