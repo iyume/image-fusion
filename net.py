@@ -1,9 +1,11 @@
+import math
 from typing import Callable, Optional
 
 import torch.nn.functional as F
 from torch import Tensor, nn
 
 Conv_T = Callable[[Tensor], Tensor]
+Conv2_T = Callable[[Tensor, Tensor], Tensor]
 
 
 def conv3x3(in_channels: int, out_channels: int, groups: int = 1) -> nn.Module:
@@ -18,8 +20,10 @@ class Bottleneck(nn.Module):
     def __init__(self, in_channels: int, out_channels: int, mid_channels: int) -> None:
         super().__init__()
         self.conv = nn.Sequential(
-            nn.Conv2d(in_channels, mid_channels, 1),
-            # nn.BatchNorm2d(mid_channels),  # must remove
+            nn.Conv2d(
+                in_channels, mid_channels, 1, groups=math.gcd(in_channels, mid_channels)
+            ),
+            # nn.BatchNorm2d(mid_channels),  # bad layer
             nn.ReLU(True),
             conv3x3(mid_channels, mid_channels),
             # nn.BatchNorm2d(mid_channels),
@@ -28,7 +32,7 @@ class Bottleneck(nn.Module):
             # nn.BatchNorm2d(out_channels),
         )
         self.downsample = (
-            nn.Conv2d(in_channels, out_channels, 1)
+            nn.Conv2d(in_channels, out_channels, 1)  # never groups this
             if in_channels != out_channels
             else None
         )
@@ -49,15 +53,15 @@ class AutoEncoder(nn.Module):
     def __init__(self) -> None:
         super().__init__()
         self._middle_layer_hook: Optional[Conv_T] = None
-        groups = 16
+        groups = 12
         cgrow = (groups, groups * 2, groups * 3)
         cmid = (8, 12)
-        self.encode = nn.Sequential(
+        self.layer = nn.Sequential(
             conv3x3(1, cgrow[0]),
             Bottleneck(cgrow[0], cgrow[1], cmid[0]),
             Bottleneck(cgrow[1], cgrow[2], cmid[1]),
         )
-        self.decode = nn.Sequential(
+        self.rlayer = nn.Sequential(
             conv3x3(cgrow[2], cgrow[1], groups=groups),
             nn.ReLU(True),
             conv3x3(cgrow[1], cgrow[0], groups=groups),
@@ -66,12 +70,42 @@ class AutoEncoder(nn.Module):
         )
 
     def forward(self, x: Tensor) -> Tensor:
-        en = self.encode(x)
+        en = self.layer(x)
         if self._middle_layer_hook is not None:
             en = self._middle_layer_hook(en)
-        de = self.decode(en)
+        de = self.rlayer(en)
         return de
+
+    def encode(self, x: Tensor) -> Tensor:
+        out = self.layer(x)
+        return out
+
+    def decode(self, x: Tensor) -> Tensor:
+        out = self.rlayer(x)
+        return out
 
     def on_middle_layer(self, func: Conv_T) -> None:
         """Register hook before decoding."""
         self._middle_layer_hook = func
+
+
+class Fusion:
+    """Customize layer."""
+
+    net: AutoEncoder
+    _fusion_method: Optional[Conv2_T]
+
+    def __init__(self, net: AutoEncoder) -> None:
+        self.net = net
+        self._fusion_method = None
+
+    def __call__(self, x1: Tensor, x2: Tensor) -> Tensor:
+        if self._fusion_method is None:
+            raise NotImplementedError
+        x1_features = self.net.encode(x1)
+        x2_features = self.net.encode(x2)
+        en = self._fusion_method(x1_features, x2_features)
+        return self.net.decode(en)
+
+    def register_fusion_method(self, func: Conv2_T) -> None:
+        self._fusion_method = func

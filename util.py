@@ -88,7 +88,10 @@ def sobelxy(im: Tensor) -> Tensor:
     kernel = im.new_tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]])
     wx = kernel.unsqueeze(0).unsqueeze(0)
     wy = kernel.transpose(1, 0).unsqueeze(0).unsqueeze(0)
-    return F.conv2d(im, wx, padding=1) + F.conv2d(im, wy, padding=1)
+    im = F.pad(im, (1, 1, 1, 1), mode="reflect")
+    gx = F.conv2d(im, wx)
+    gy = F.conv2d(im, wy)
+    return gx * 0.5 + gy * 0.5  # like addWeighted
 
 
 class Sobelxy(nn.Module):

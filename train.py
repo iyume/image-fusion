@@ -14,10 +14,13 @@ trainset = MSRSset(config.MSRSdir, train=True)
 train_loader = DataLoader(trainset, batch_size=config.batch_size, shuffle=True)
 
 
-def _train(net: AutoEncoder, optimizer: torch.optim.Optimizer) -> None:
+def _train(
+    net: AutoEncoder, optimizer: torch.optim.Optimizer, train_state: dict
+) -> None:
     batch: Tuple[torch.Tensor, ...]
     pixel_loss = torch.nn.MSELoss()
     ssim = SSIM(1, channel=1)
+    loss_total_sum = 0.0
     for i, batch in enumerate(train_loader):
         vi, ir, label, _ = batch
         vi = vi.to(device=config.device)
@@ -38,7 +41,10 @@ def _train(net: AutoEncoder, optimizer: torch.optim.Optimizer) -> None:
                 loss_ssim,
                 loss_grad,
             )
-        )
+        )  # __format__ magic
+        loss_total_sum += loss_total.item()
+    train_state.clear()
+    train_state.update({"loss_total_avg": f"{loss_total_sum / len(train_loader):.4f}"})
 
 
 def train(
@@ -57,10 +63,12 @@ def train(
         checkpoint = Path(ckpt_dir) / "model_{}_{}.pth".format(
             trainset.name, f"epoch{epoch + 1}"
         )
-        _train(net, optimizer)
-        logger.debug(f"saving model to {checkpoint}")
+        train_state = {}
+        _train(net, optimizer, train_state)
+        logger.info(f"epoch {epoch + 1} training complete")
+        logger.info("  ".join(f"{k}: {v}" for k, v in train_state.items()))
         torch.save(net.state_dict(), checkpoint)
-        logger.info(f"epoch {epoch + 1} training complete, model saved at {checkpoint}")
+        logger.info(f"model saved at {checkpoint}")
 
 
 if __name__ == "__main__":
