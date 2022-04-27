@@ -1,6 +1,7 @@
 import math
-from typing import Callable, Optional
+from typing import Callable, Optional, Tuple, Union, overload
 
+import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
@@ -8,10 +9,39 @@ Conv_T = Callable[[Tensor], Tensor]
 Conv2_T = Callable[[Tensor, Tensor], Tensor]
 
 
-def conv3x3(in_channels: int, out_channels: int, groups: int = 1) -> nn.Module:
+def conv3x3(
+    in_channels: int, out_channels: int, bias: bool = True, groups: int = 1
+) -> nn.Conv2d:
     return nn.Conv2d(
-        in_channels, out_channels, 3, padding=1, padding_mode="reflect", groups=groups
+        in_channels,
+        out_channels,
+        3,
+        padding=1,
+        bias=bias,
+        padding_mode="reflect",
+        groups=groups,
     )
+
+
+class Sobelxy(nn.Module):
+    def __init__(self, channels: int) -> None:
+        super().__init__()
+        kernel = torch.tensor(
+            [[1, 0, -1], [2, 0, -2], [1, 0, -1]], dtype=torch.float32
+        ).reshape(1, 1, 3, 3)
+        self.convx = conv3x3(channels, channels, bias=False, groups=channels)
+        self.convx.weight = nn.parameter.Parameter(kernel.repeat(channels, 1, 1, 1))
+        self.convy = conv3x3(channels, channels, bias=False, groups=channels)
+        self.convy.weight = nn.parameter.Parameter(
+            kernel.transpose(3, 2).repeat(channels, 1, 1, 1)
+        )
+        self.requires_grad_(False)
+
+    def __call__(self, x: Tensor) -> Tensor:
+        with torch.no_grad():  # ensure no grad
+            gx = F.relu(self.convx(x))
+            gy = F.relu(self.convy(x))
+            return 0.5 * gx + 0.5 * gy
 
 
 class Bottleneck(nn.Module):
@@ -52,7 +82,6 @@ class AutoEncoder(nn.Module):
 
     def __init__(self) -> None:
         super().__init__()
-        self._middle_layer_hook: Optional[Conv_T] = None
         groups = 12  # multiple of 4
         cgrow = (groups, groups * 2, groups * 3)
         cmid = (8, 12)
@@ -61,54 +90,30 @@ class AutoEncoder(nn.Module):
             Bottleneck(cgrow[0], cgrow[1], cmid[0]),
             Bottleneck(cgrow[1], cgrow[2], cmid[1]),
         )
-        self.rlayer = nn.Sequential(
+        self.sobelxy = Sobelxy(cgrow[2])
+        self.downsample = nn.Sequential(
             nn.Conv2d(cgrow[2] * 2, cgrow[2], 1),
+            nn.ReLU(True),
+        )
+        self.rlayer = nn.Sequential(
             conv3x3(cgrow[2], cgrow[1], groups=groups),
             nn.ReLU(True),
-            conv3x3(cgrow[1], cgrow[0], groups=groups // 4),
+            conv3x3(cgrow[1], cgrow[0], groups=groups // 2),
             nn.ReLU(True),
-            conv3x3(cgrow[0], 6),
-            nn.ReLU(True),
-            conv3x3(6, 1),
+            conv3x3(cgrow[0], 1),
         )
 
     def forward(self, x: Tensor) -> Tensor:
-        en = self.layer(x)
-        if self._middle_layer_hook is not None:
-            en = self._middle_layer_hook(en)
-        de = self.rlayer(en)
+        en = self.encode(x)
+        de = self.decode((en, self.sobelxy(en)))
         return de
 
     def encode(self, x: Tensor) -> Tensor:
         out = self.layer(x)
         return out
 
-    def decode(self, x: Tensor) -> Tensor:
+    def decode(self, x: Union[Tensor, Tuple[Tensor, Tensor]]) -> Tensor:
+        if isinstance(x, tuple):
+            x = self.downsample(torch.cat(x, 1))
         out = self.rlayer(x)
         return out
-
-    def on_middle_layer(self, func: Conv_T) -> None:
-        """Register hook before decoding."""
-        self._middle_layer_hook = func
-
-
-class Fusion:
-    """Customize layer."""
-
-    net: AutoEncoder
-    _fusion_method: Optional[Conv2_T]
-
-    def __init__(self, net: AutoEncoder) -> None:
-        self.net = net
-        self._fusion_method = None
-
-    def __call__(self, x1: Tensor, x2: Tensor) -> Tensor:
-        if self._fusion_method is None:
-            raise NotImplementedError
-        x1_features = self.net.encode(x1)
-        x2_features = self.net.encode(x2)
-        en = self._fusion_method(x1_features, x2_features)
-        return self.net.decode(en)
-
-    def register_fusion_method(self, func: Conv2_T) -> None:
-        self._fusion_method = func

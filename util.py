@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 import torch
 import torch.nn.functional as F
-from torch import Tensor, nn
+from torch import Tensor
 from torch.utils.data import Dataset as BaseDataset
 from torchvision.transforms import ToTensor
 
@@ -95,33 +95,3 @@ def sobelxy(im: Tensor) -> Tensor:
     gx = F.conv2d(im, wx, groups=im.shape[1])
     gy = F.conv2d(im, wy, groups=im.shape[1])
     return gx * 0.5 + gy * 0.5  # like addWeighted
-
-
-class Sobelxy(nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
-        kernel = torch.tensor([[1, 0, -1], [2, 0, -2], [1, 0, -1]], dtype=torch.float32)
-        self.convx = nn.Conv2d(1, 1, 3, stride=1, padding=1, bias=False)
-        self.convx.weight.data = kernel.unsqueeze(0).unsqueeze(0)
-        self.convy = nn.Conv2d(1, 1, 3, stride=1, padding=1, bias=False)
-        self.convy.weight.data = kernel.T.unsqueeze(0).unsqueeze(0)
-        self.requires_grad_(False)
-
-    def forward(self, x: Tensor) -> Tensor:
-        return self.convx(x) + self.convy(x)
-
-
-class Scharrxy(nn.Module):
-    def __init__(self) -> None:
-        super().__init__()
-        kernel = torch.tensor(
-            [[3, 0, -3], [10, 0, -10], [3, 0, -3]], dtype=torch.float32
-        )
-        self.convx = nn.Conv2d(1, 1, 3, stride=1, padding=1, bias=False)
-        self.convx.weight.data = kernel.unsqueeze(0).unsqueeze(0)
-        self.convy = nn.Conv2d(1, 1, 3, stride=1, padding=1, bias=False)
-        self.convy.weight.data = kernel.T.unsqueeze(0).unsqueeze(0)
-        self.requires_grad_(False)
-
-    def forward(self, x: Tensor) -> Tensor:
-        return self.convx(x) + self.convy(x)

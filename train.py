@@ -8,17 +8,12 @@ from torch.utils.data import DataLoader
 from config import config
 from loss import SSIM, grad_loss
 from net import AutoEncoder
-from util import MSRSset, logger, sobelxy
+from util import MSRSset, logger
 
 trainset = MSRSset(config.MSRSdir, train=True)
 train_loader = DataLoader(trainset, batch_size=config.batch_size, shuffle=True)
 
 net = AutoEncoder()
-
-
-@net.on_middle_layer
-def _(features: torch.Tensor) -> torch.Tensor:
-    return torch.cat((features, sobelxy(features)), 1)
 
 
 def _train(

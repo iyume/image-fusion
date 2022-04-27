@@ -5,11 +5,25 @@ from typing import Union
 
 import cv2
 import torch
+from torch import Tensor
 from torchvision import transforms
 
 from config import config
 from net import AutoEncoder
-from util import logger, sobelxy
+from util import logger
+
+
+def run_fusion(vi: Tensor, ir: Tensor) -> Tensor:
+    vi_features = net.encode(vi)
+    ir_features = net.encode(ir)
+    out = net.decode(
+        (
+            torch.max(vi_features, ir_features),
+            torch.max(net.sobelxy(vi_features), net.sobelxy(ir_features)),
+        )
+    )
+    return out
+
 
 eval_transform = transforms.Compose(
     [transforms.ToTensor(), lambda x: torch.unsqueeze(x, dim=0)]
@@ -40,17 +54,7 @@ def evaluate(state_dict: OrderedDict, output_dir: Union[Path, str]) -> None:
             )
             vi = vi.to(config.device)
             ir = ir.to(config.device)
-            vi_features = net.encode(vi)
-            ir_features = net.encode(ir)
-            out = net.decode(
-                torch.cat(
-                    (
-                        torch.max(vi_features, ir_features),
-                        torch.max(sobelxy(vi_features), sobelxy(ir_features)),
-                    ),
-                    1,
-                )
-            )
+            out = run_fusion(vi, ir)
             etime = time()
             logger.info(f"test {i+1:02d}: {etime-stime:.4f}")
             cv2.imwrite(
