@@ -6,7 +6,6 @@ class Config:
 
     log_level = "DEBUG"  # only INFO and DEBUG level support
     MSRSdir = "./MSRS"
-    visible_is_gray = True
     epoch = 3
     learning_rate = 1e-3
     batch_size = 6

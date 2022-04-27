@@ -1,9 +1,11 @@
 import math
-from typing import Callable, Optional, Tuple, Union, overload
+from typing import Callable, Tuple, Union
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
+
+from util import sobelxy
 
 Conv_T = Callable[[Tensor], Tensor]
 Conv2_T = Callable[[Tensor, Tensor], Tensor]
@@ -23,25 +25,27 @@ def conv3x3(
     )
 
 
-class Sobelxy(nn.Module):
-    def __init__(self, channels: int) -> None:
-        super().__init__()
-        kernel = torch.tensor(
-            [[1, 0, -1], [2, 0, -2], [1, 0, -1]], dtype=torch.float32
-        ).reshape(1, 1, 3, 3)
-        self.convx = conv3x3(channels, channels, bias=False, groups=channels)
-        self.convx.weight = nn.parameter.Parameter(kernel.repeat(channels, 1, 1, 1))
-        self.convy = conv3x3(channels, channels, bias=False, groups=channels)
-        self.convy.weight = nn.parameter.Parameter(
-            kernel.transpose(3, 2).repeat(channels, 1, 1, 1)
-        )
-        self.requires_grad_(False)
+# class Sobelxy(nn.Module):
+#     """This module performs slower than `util.sobelxy`."""
 
-    def __call__(self, x: Tensor) -> Tensor:
-        with torch.no_grad():  # ensure no grad
-            gx = F.relu(self.convx(x))
-            gy = F.relu(self.convy(x))
-            return 0.5 * gx + 0.5 * gy
+#     def __init__(self, channels: int) -> None:
+#         super().__init__()
+#         kernel = torch.tensor(
+#             [[1, 0, -1], [2, 0, -2], [1, 0, -1]], dtype=torch.float32
+#         ).reshape(1, 1, 3, 3)
+#         self.convx = conv3x3(channels, channels, bias=False, groups=channels)
+#         self.convx.weight = nn.parameter.Parameter(kernel.repeat(channels, 1, 1, 1))
+#         self.convy = conv3x3(channels, channels, bias=False, groups=channels)
+#         self.convy.weight = nn.parameter.Parameter(
+#             kernel.transpose(3, 2).repeat(channels, 1, 1, 1)
+#         )
+#         self.requires_grad_(False)
+
+#     def __call__(self, x: Tensor) -> Tensor:
+#         with torch.no_grad():  # ensure no grad
+#             gx = F.relu(self.convx(x))
+#             gy = F.relu(self.convy(x))
+#             return 0.5 * gx + 0.5 * gy
 
 
 class Bottleneck(nn.Module):
@@ -90,7 +94,7 @@ class AutoEncoder(nn.Module):
             Bottleneck(cgrow[0], cgrow[1], cmid[0]),
             Bottleneck(cgrow[1], cgrow[2], cmid[1]),
         )
-        self.sobelxy = Sobelxy(cgrow[2])
+        self.sobelxy = sobelxy
         self.downsample = nn.Sequential(
             nn.Conv2d(cgrow[2] * 2, cgrow[2], 1),
             nn.ReLU(True),

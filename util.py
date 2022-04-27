@@ -64,8 +64,7 @@ class MSRSset(BaseDataset):
         imir = cv2.imread(str(ir_file), cv2.IMREAD_GRAYSCALE)
         imlabel = cv2.imread(str(label_file), cv2.IMREAD_GRAYSCALE)
         is_night = filename.endswith("N.png")
-        if config.visible_is_gray:
-            imvi = cv2.cvtColor(imvi, cv2.COLOR_BGR2GRAY)
+        imvi = cv2.cvtColor(imvi, cv2.COLOR_BGR2GRAY)  # only for train
         return (
             self.transform(imvi),
             self.transform(imir),
@@ -86,7 +85,7 @@ class MSRSset(BaseDataset):
 
 def sobelxy(im: Tensor) -> Tensor:
     """Gradient implement. addWeighted 0.5 and batch suit."""
-    kernel = im.new_tensor([[-1, 0, 1], [-2, 0, 2], [-1, 0, 1]])
+    kernel = im.new_tensor([[1, 0, -1], [2, 0, -2], [1, 0, -1]])
     wx = kernel.unsqueeze(0).unsqueeze(0)
     wy = kernel.transpose(1, 0).unsqueeze(0).unsqueeze(0)
     wx = wx.repeat(im.shape[1], 1, 1, 1)
