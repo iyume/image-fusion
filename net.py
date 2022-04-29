@@ -76,7 +76,7 @@ class Bottleneck(nn.Module):
         if self.downsample is not None:
             identity = self.downsample(identity)
         residual = self.conv(x)
-        identity += residual
+        identity = identity + residual
         identity = F.relu_(identity)
         return identity
 
