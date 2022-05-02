@@ -25,32 +25,7 @@ def conv3x3(
     )
 
 
-# class Sobelxy(nn.Module):
-#     """This module performs slower than `util.sobelxy`."""
-
-#     def __init__(self, channels: int) -> None:
-#         super().__init__()
-#         kernel = torch.tensor(
-#             [[1, 0, -1], [2, 0, -2], [1, 0, -1]], dtype=torch.float32
-#         ).reshape(1, 1, 3, 3)
-#         self.convx = conv3x3(channels, channels, bias=False, groups=channels)
-#         self.convx.weight = nn.parameter.Parameter(kernel.repeat(channels, 1, 1, 1))
-#         self.convy = conv3x3(channels, channels, bias=False, groups=channels)
-#         self.convy.weight = nn.parameter.Parameter(
-#             kernel.transpose(3, 2).repeat(channels, 1, 1, 1)
-#         )
-#         self.requires_grad_(False)
-
-#     def __call__(self, x: Tensor) -> Tensor:
-#         with torch.no_grad():  # ensure no grad
-#             gx = F.relu(self.convx(x))
-#             gy = F.relu(self.convy(x))
-#             return 0.5 * gx + 0.5 * gy
-
-
 class Bottleneck(nn.Module):
-    """Grouped downsample Bottleneck implement."""
-
     def __init__(self, in_channels: int, out_channels: int, mid_channels: int) -> None:
         super().__init__()
         self.conv = nn.Sequential(
@@ -82,11 +57,11 @@ class Bottleneck(nn.Module):
 
 
 class AutoEncoder(nn.Module):
-    """Implement Bottleneck encoder with groups decoder."""
+    """Implement Bottleneck encoder with groups parameter."""
 
     def __init__(self) -> None:
         super().__init__()
-        groups = 12  # multiple of 4
+        groups = 12
         cgrow = (groups, groups * 2, groups * 3)
         cmid = (8, 12)
         self.layer = nn.Sequential(
@@ -94,11 +69,13 @@ class AutoEncoder(nn.Module):
             Bottleneck(cgrow[0], cgrow[1], cmid[0]),
             Bottleneck(cgrow[1], cgrow[2], cmid[1]),
         )
+        # maybe upsample before sobelxy?
         self.sobelxy = sobelxy
-        self.downsample = nn.Sequential(
+        self.upsample = nn.Sequential(
             nn.Conv2d(cgrow[2] * 2, cgrow[2], 1),
             nn.ReLU(True),
         )
+        # Bottleneck is not suit for decoder
         self.rlayer = nn.Sequential(
             conv3x3(cgrow[2], cgrow[1], groups=groups),
             nn.ReLU(True),
@@ -118,6 +95,6 @@ class AutoEncoder(nn.Module):
 
     def decode(self, x: Union[Tensor, Tuple[Tensor, Tensor]]) -> Tensor:
         if isinstance(x, tuple):
-            x = self.downsample(torch.cat(x, 1))
+            x = self.upsample(torch.cat(x, 1))
         out = self.rlayer(x)
         return out

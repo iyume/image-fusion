@@ -1,5 +1,7 @@
+import itertools
 import logging
 import os
+import warnings
 from pathlib import Path
 from typing import Tuple
 
@@ -94,3 +96,37 @@ def sobelxy(im: Tensor) -> Tensor:
     gx = F.conv2d(im, wx, groups=im.shape[1])
     gy = F.conv2d(im, wy, groups=im.shape[1])
     return gx * 0.5 + gy * 0.5  # like addWeighted
+
+
+def _fspecial_gauss_1d(size: int = 11, sigma: float = 1.5) -> Tensor:
+    coords = torch.arange(size, dtype=torch.float)
+    coords -= size // 2
+    g = torch.exp(-(coords**2) / (2 * sigma**2))
+    g /= g.sum()
+    return g.unsqueeze(0).unsqueeze(0)
+
+
+def gaussian_filter(input: Tensor, size: int = 11, sigma: float = 1.5) -> Tensor:
+    """Blur input with 1-D kernel."""
+    win = _fspecial_gauss_1d(size, sigma).to(input.device)
+    win = win.repeat([input.shape[1]] + [1] * (len(input.shape) - 1))
+    assert all([ws == 1 for ws in win.shape[1:-1]]), win.shape
+    if len(input.shape) == 4:
+        conv = F.conv2d
+    elif len(input.shape) == 5:
+        conv = F.conv3d
+    else:
+        raise NotImplementedError(input.shape)
+    C = input.shape[1]
+    out = F.pad(input, tuple(itertools.repeat((size - 1) // 2, 4)), mode="reflect")
+    for i, s in enumerate(input.shape[2:]):
+        if s >= win.shape[-1]:
+            out = conv(
+                out, weight=win.transpose(2 + i, -1), stride=1, padding=0, groups=C
+            )
+        else:
+            warnings.warn(
+                f"Skipping Gaussian Smoothing at dimension 2+{i} for input: {input.shape} "
+                f"and win size: {win.shape[-1]}"
+            )
+    return out

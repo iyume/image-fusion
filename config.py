@@ -4,7 +4,7 @@ import torch
 class Config:
     """Training config."""
 
-    log_level = "DEBUG"  # only INFO and DEBUG level support
+    log_level = "INFO"  # only INFO and DEBUG level support
     MSRSdir = "./MSRS"
     epoch = 3
     learning_rate = 1e-3

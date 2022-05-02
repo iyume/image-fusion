@@ -26,7 +26,7 @@ def _train(
     for i, batch in enumerate(train_loader):
         vi, ir, label, _ = batch
         vi = vi.to(device=config.device)
-        ir = ir.to(device=config.device)
+        # ir = ir.to(device=config.device)
         optimizer.zero_grad()
         out = net(vi)
         loss_pixel = pixel_loss(out, vi)

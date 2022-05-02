@@ -12,16 +12,33 @@ from config import config
 from net import AutoEncoder
 from util import logger
 
+torch.set_grad_enabled(False)
+
 
 def run_fusion(vi: Tensor, ir: Tensor) -> Tensor:
+    st = time()
     vi_features = net.encode(vi)
     ir_features = net.encode(ir)
+    et = time()
+    logger.debug(f"encode vi and ir: {et-st}")
+
+    st = time()
+    vi_grads = net.sobelxy(vi_features)
+    ir_grads = net.sobelxy(ir_features)
+    et = time()
+    logger.debug(f"sobelxy vi and ir: {et-st}")
+
+    st = time()
+    # features_max = torch.max(vi_features, ir_features)
+    # features_gap = features_max - vi_features
+    # maybe softmax
+    # features = vi_features + features_gap
     out = net.decode(
-        (
-            torch.max(vi_features, ir_features),
-            torch.max(net.sobelxy(vi_features), net.sobelxy(ir_features)),
-        )
+        (torch.max(vi_features, ir_features), torch.max(vi_grads, ir_grads))
     )
+    et = time()
+    logger.debug(f"decode: {et-st}")
+
     return out
 
 
@@ -30,41 +47,38 @@ eval_transform = transforms.Compose(
 )
 
 net = AutoEncoder()
+net.eval()
+logger.debug(repr(net))
 
 
 def evaluate(state_dict: OrderedDict, output_dir: Union[Path, str]) -> None:
     """Evaluate images."""
-    logger.debug(repr(state_dict.keys()))
-    net.load_state_dict(state_dict, strict=False)
-    net.eval()
+    net.load_state_dict(state_dict, strict=True)
     net.to(config.device)
     if not isinstance(output_dir, Path):
         output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    vi_filename = "test_img/vi{:01d}.png"
-    ir_filename = "test_img/ir{:01d}.png"
-    with torch.no_grad():
-        for i in range(20):
-            stime = time()
-            vi = eval_transform(
-                cv2.imread(vi_filename.format(i + 1), cv2.IMREAD_GRAYSCALE)
-            )
-            ir = eval_transform(
-                cv2.imread(ir_filename.format(i + 1), cv2.IMREAD_GRAYSCALE)
-            )
-            vi = vi.to(config.device)
-            ir = ir.to(config.device)
-            out = run_fusion(vi, ir)
-            etime = time()
-            logger.info(f"test {i+1:02d}: {etime-stime:.4f}")
-            cv2.imwrite(
-                str(output_dir / f"fusion{i+1:02d}.png"),
-                out.detach().cpu().squeeze().numpy() * 255,
-            )
+    num_image = 25
+    time_log = []
+    for i in range(num_image):
+        st = time()
+        vi = eval_transform(
+            cv2.imread(f"test_img/vi{i+1:01d}.png", cv2.IMREAD_GRAYSCALE)
+        )
+        ir = eval_transform(
+            cv2.imread(f"test_img/ir{i+1:01d}.png", cv2.IMREAD_GRAYSCALE)
+        )
+        vi = vi.to(config.device)
+        ir = ir.to(config.device)
+        out = run_fusion(vi, ir)
+        out = out.detach().cpu().squeeze().numpy() * 255
+        et = time()
+        time_log.append(et - st)
+        logger.info(f"test {i+1:02d}: {et-st:.4f}")
+        cv2.imwrite(str(output_dir / f"fusion{i+1:02d}.png"), out)
+    logger.info(f"sum: {sum(time_log)}  avg: {sum(time_log)/num_image}")
 
 
 if __name__ == "__main__":
-    evaluate(
-        torch.load("./ckpt/model_MSRS_encoder_final.pth", map_location=config.device),
-        "result",
-    )
+    state_dict = torch.load("./ckpt/model_MSRS_final.pth", map_location=config.device)
+    evaluate(state_dict, "result")
