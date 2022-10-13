@@ -58,13 +58,13 @@ indicators = (I.EN, I.MI, I.VIF, I.SF, I.SD, I.QABF, I.SCD, I.AG)
 
 
 testset = "TNO"  # maybe mapping
-avg_group = 20  # avg n elements
+avg_group = 20  # avg n elements, the count of data if data few
 codes = (
     "densefuse",
     "FusionGAN",
     "GANMcC",
-    "IFCNN",
-    "PMGI",
+    # "IFCNN",
+    # "PMGI",
     "rfn-nest",
     "U2Fusion",
     "ours",
@@ -81,7 +81,7 @@ data = np.take(
 )
 
 
-# data must be (C,I,N)
+# pre-data is (C,I,N)
 assert len(codes) == data.shape[0]
 assert len(indicators) == data.shape[1]
 data = data.transpose(1, 0, 2)  # (I,C,N)
