@@ -179,6 +179,7 @@ cython_debug/
 # End of https://www.toptal.com/developers/gitignore/api/visualstudiocode,python
 
 *.pth
+!/ckpt/revision7/model_MSRS_epoch19.pth
 
 /MSRS
 /data
