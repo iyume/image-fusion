@@ -70,8 +70,7 @@ class AutoEncoder(nn.Module):
             Bottleneck(cgrow[1], cgrow[2], cmid[1]),
         )
         # maybe upsample before sobelxy?
-        self.sobelxy = sobelxy
-        self.upsample = nn.Sequential(
+        self.downsample = nn.Sequential(
             nn.Conv2d(cgrow[2] * 2, cgrow[2], 1),
             nn.ReLU(True),
         )
@@ -86,7 +85,7 @@ class AutoEncoder(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         en = self.encode(x)
-        de = self.decode((en, self.sobelxy(en)))
+        de = self.decode((en, sobelxy(en)))
         return de
 
     def encode(self, x: Tensor) -> Tensor:
@@ -95,6 +94,6 @@ class AutoEncoder(nn.Module):
 
     def decode(self, x: Union[Tensor, Tuple[Tensor, Tensor]]) -> Tensor:
         if isinstance(x, tuple):
-            x = self.upsample(torch.cat(x, 1))
+            x = self.downsample(torch.cat(x, 1))
         out = self.rlayer(x)
         return out

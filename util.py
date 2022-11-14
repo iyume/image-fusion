@@ -48,6 +48,12 @@ class MSRSset(BaseDataset):
         self.vi_test_path = self.root / "Visible" / "test" / "MSRS"
         self.ir_test_path = self.root / "Infrared" / "test" / "MSRS"
         self.label_test_path = self.root / "Label" / "test" / "MSRS"
+        # self.vi_train_path = self.root / "train" / "vi"
+        # self.ir_train_path = self.root / "train" / "ir"
+        # self.label_train_path = self.root / "train" / "Segmentation_labels"
+        # self.vi_test_path = self.root / "test" / "ir"
+        # self.ir_test_path = self.root / "test" / "ir"
+        # self.label_test_path = self.root / "test" / "Segmentation_labels"
         self.train_filenames = sorted(os.listdir(self.vi_train_path))
         self.test_filenames = sorted(os.listdir(self.vi_test_path))
 

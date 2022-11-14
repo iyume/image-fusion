@@ -10,7 +10,7 @@ from torchvision import transforms
 
 from config import config
 from net import AutoEncoder
-from util import logger
+from util import imsave_tensor, logger, sobelxy
 
 torch.set_grad_enabled(False)
 
@@ -22,9 +22,13 @@ def run_fusion(vi: Tensor, ir: Tensor) -> Tensor:
     et = time()
     logger.debug(f"encode vi and ir: {et-st}")
 
+    # vis_vi_features = vi_features.squeeze(0)
+    # for i, feature in enumerate(vis_vi_features):
+    #     imsave_tensor(f"vis{i}.png", feature)
+
     st = time()
-    vi_grads = net.sobelxy(vi_features)
-    ir_grads = net.sobelxy(ir_features)
+    vi_grads = sobelxy(vi_features)
+    ir_grads = sobelxy(ir_features)
     et = time()
     logger.debug(f"sobelxy vi and ir: {et-st}")
 
@@ -60,7 +64,7 @@ def evaluate(state_dict: OrderedDict, output_dir: Union[Path, str]) -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
     num_image = 25
     time_log = []
-    for i in range(num_image):
+    for i in range(2, 3):
         st = time()
         vi = eval_transform(
             cv2.imread(f"test_img/vi{i+1:01d}.png", cv2.IMREAD_GRAYSCALE)
@@ -80,5 +84,9 @@ def evaluate(state_dict: OrderedDict, output_dir: Union[Path, str]) -> None:
 
 
 if __name__ == "__main__":
-    state_dict = torch.load("./ckpt/model_MSRS_final.pth", map_location=config.device)
+    state_dict = torch.load(
+        "./ckpt/revision7/model_MSRS_epoch19.pth", map_location=config.device
+    )
+    state_dict.pop("sobelxy.convx.weight")  # historical problem
+    state_dict.pop("sobelxy.convy.weight")
     evaluate(state_dict, "result")
